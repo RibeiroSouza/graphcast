@@ -1,0 +1,5 @@
+[tool.black]
+target_version = ['py38']
+line_length = 88
+indent_size = 4
+color = true
