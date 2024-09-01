@@ -16,6 +16,16 @@ logger = logging.getLogger(__name__)
 
 
 def upload_completion_file(client, aws_bucket, cast_id):
+    """Uploads a completion file to the specified AWS S3 bucket.
+
+    Args:
+        client: The AWS S3 client.
+        aws_bucket: The name of the AWS S3 bucket.
+        cast_id: The ID of the cast.
+
+    Returns:
+        None
+    """
     local_complete_file = "/tmp/.easy_graphcast_complete"
 
     with open(local_complete_file, "w") as f:
@@ -36,7 +46,20 @@ def cast_all(
     forcast_list,
     cast_id
 ):
+    """Performs the casting process for all the specified forecasts.
 
+    Args:
+        aws_access_key_id (str): The AWS access key ID.
+        aws_secret_access_key (str): The AWS secret access key.
+        aws_bucket (str): The name of the AWS S3 bucket.
+        cds_url (str): The URL of the CDS.
+        cds_key (str): The key for the CDS.
+        forcast_list (str): The list of forecasts.
+        cast_id (str): The ID of the cast.
+
+    Returns:
+        None
+    """
     save_cds_rcfile(cds_key=cds_key, cds_url=cds_url)
     logger.debug("cds credentials file created")
     forcast_list = parse_forcast_list(forcast_list)

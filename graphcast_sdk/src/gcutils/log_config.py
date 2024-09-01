@@ -2,6 +2,7 @@ import logging
 
 
 def setup_logging():
+    """Set up logging configuration."""
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
     logging.basicConfig(

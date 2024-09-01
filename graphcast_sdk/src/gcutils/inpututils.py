@@ -10,6 +10,11 @@ logger = logging.getLogger(__name__)
 
 
 def generate_cast_id():
+    """Generate a unique cast ID based on the current time and random adjectives and nouns.
+
+    Returns:
+        str: The generated cast ID.
+    """
     adj = [
         "whispering", "forgotten", "sublime", "phantom", "mystic",
         "cosmic", "dazzling", "spectral", "fleeting", "shimmering",
@@ -55,6 +60,15 @@ def generate_cast_id():
 
 
 def confirm_start_time_exists(start_point, c):
+    """Check if the start time exists and retrieve the corresponding data file.
+
+    Args:
+        start_point (dict): The start point information.
+        c: The CDS API client.
+
+    Returns:
+        None
+    """
     start_datetime = datetime.strptime(start_point["start_date"], "%Y%m%d")
 
     c.retrieve(
@@ -76,6 +90,14 @@ def confirm_start_time_exists(start_point, c):
 
 
 def parse_forcast_list(forcast_list):
+    """Parse the forecast list and convert it to regular JSON.
+
+    Args:
+        forcast_list (str): The forecast list.
+
+    Returns:
+        list: The parsed forecast list.
+    """
     # the runpod API cannot handle double quotes so forcast_list is single quoted
     # we need to convert it to regular JSON
     forcast_list = json.loads(forcast_list.replace("'", '"'))
@@ -88,10 +110,31 @@ def parse_forcast_list(forcast_list):
 
 
 def get_completion_path(cast_id):
+    """Get the completion path for a given cast ID.
+
+    Args:
+        cast_id (str): The cast ID.
+
+    Returns:
+        str: The completion path.
+    """
     return f"{cast_id}/.easy_graphcast_complete"
 
 
 def validate_forcast_list(forcast_list, strict_start_times=True):
+    """Validate the forecast list and perform checks on the start times.
+
+    Args:
+        forcast_list (str): The forecast list.
+        strict_start_times (bool, optional): Whether to enforce strict start times. Defaults to True.
+
+    Raises:
+        ValueError: If the forecast list contains double quotes.
+        ValueError: If the start times are not 0600 or 1800.
+
+    Returns:
+        None
+    """
     # the runpod API cannot handle double quotes so forcast_list is single
     # quoted
     latest_available_date = None
