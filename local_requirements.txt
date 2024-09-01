@@ -34,7 +34,7 @@ ecmwflibs==0.5.3
 email-validator==2.1.0.post1
 entrypoints==0.4
 exceptiongroup==1.2.0
-fastapi==0.108.0
+fastapi==0.109.1
 filelock==3.13.1
 findlibs==0.0.5
 frozenlist==1.4.1
