@@ -65,7 +65,7 @@ inquirerpy==0.3.4
 itsdangerous==2.1.2
 jax==0.4.23
 jaxlib==0.4.23
-Jinja2==3.1.2
+Jinja2==3.1.4
 jmespath==1.0.1
 jmp==0.0.4
 jraph==0.0.6.dev0
