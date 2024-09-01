@@ -134,7 +134,7 @@ termcolor==2.4.0
 tomli==2.0.1
 tomlkit==0.12.3
 toolz==0.12.0
-tqdm==4.66.1
+tqdm==4.66.3
 tqdm-loggable==0.2
 trimesh==4.0.8
 typing_extensions==4.9.0
