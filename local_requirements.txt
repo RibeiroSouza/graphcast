@@ -68,7 +68,7 @@ paramiko==3.4.0
 partd==1.4.1
 pdbufr==0.11.0
 pfzy==0.3.4
-Pillow==10.1.0
+Pillow==10.3.0
 prettytable==3.9.0
 prompt-toolkit==3.0.43
 py-cpuinfo==9.0.0
