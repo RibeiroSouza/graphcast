@@ -25,7 +25,7 @@ colorama==0.4.6
 cryptography==41.0.7
 dask==2023.12.1
 dm-tree==0.1.8
-dnspython==2.4.2
+dnspython==2.6.1
 earthkit-meteo==0.0.1
 eccodes==1.6.1
 ecmwf-api-client==1.6.3
