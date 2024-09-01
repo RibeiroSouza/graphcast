@@ -1,34 +1,22 @@
-from __future__ import annotations
-
 import json
 import logging
 import time
 
 import boto3
 import runpod
-from graphcast_sdk.src.gcutils.constants import AWS_ACCESS_KEY_ID
-from graphcast_sdk.src.gcutils.constants import AWS_BUCKET
-from graphcast_sdk.src.gcutils.constants import AWS_SECRET_ACCESS_KEY
-from graphcast_sdk.src.gcutils.constants import CAST_ID
-from graphcast_sdk.src.gcutils.constants import CDS_KEY
-from graphcast_sdk.src.gcutils.constants import CDS_URL
-from graphcast_sdk.src.gcutils.constants import FORCAST_LIST
-from graphcast_sdk.src.gcutils.inpututils import generate_cast_id
-from graphcast_sdk.src.gcutils.inpututils import get_completion_path
-from graphcast_sdk.src.gcutils.inpututils import validate_forcast_list
+from gcutils.constants import AWS_ACCESS_KEY_ID, AWS_BUCKET, AWS_SECRET_ACCESS_KEY, CAST_ID, CDS_KEY, CDS_URL, FORCAST_LIST
+from gcutils.inpututils import generate_cast_id, get_completion_path, validate_forcast_list
 
 logger = logging.getLogger(__name__)
 
 
-class UploadMonitor:
-    def __init__(
-        self, pod, aws_access_key_id, aws_secret_access_key, aws_bucket, cast_id
-    ) -> None:
+class UploadMonitor():
+    def __init__(self, pod, aws_access_key_id,
+                 aws_secret_access_key, aws_bucket, cast_id) -> None:
         self.s3_client = boto3.client(
             "s3",
             aws_access_key_id=aws_access_key_id,
-            aws_secret_access_key=aws_secret_access_key,
-        )
+            aws_secret_access_key=aws_secret_access_key)
         self.pod = pod
         self.cast_id = cast_id
         self.aws_bucket = aws_bucket
@@ -38,16 +26,16 @@ class UploadMonitor:
 
         if not pod:
             raise Exception(
-                f"runpod pod {self.pod} was terminated prematurely, output of runpod.get_pod is: {pod}"
-            )
+                f"runpod pod {self.pod} was terminated prematurely, output of runpod.get_pod is: {pod}")
 
         try:
             self.s3_client.head_object(
-                Bucket=self.aws_bucket, Key=get_completion_path(self.cast_id)
-            )
+                Bucket=self.aws_bucket,
+                Key=get_completion_path(
+                    self.cast_id))
             return True
         except Exception as e:
-            if hasattr(e, "response") and e.response["Error"].get("Code") == "404":
+            if hasattr(e, "response") and e.response["Error"].get("Code") == "404":  # type: ignore
                 logger.debug(f"upload not complete, expected_s3_error {e}")
                 return False
             else:
@@ -61,7 +49,7 @@ def cast_from_parameters(param_file=None, **kwargs):
     if param_file is not None:
         assert param_file.endswith(".json"), "param_file must be a json file"
 
-        with open(param_file, "r") as f:
+        with open(param_file) as f:
             parameters = json.load(f)
         kwargs = parameters
 
@@ -70,9 +58,7 @@ def cast_from_parameters(param_file=None, **kwargs):
 
 def validate_gpu_type_id(gpu_type_id):
     if gpu_type_id == "NVIDIA A100 80GB PCIe":
-        logger.warn(
-            f"{gpu_type_id} is known to crash on runpod around 50% of the time when used in combination with the remote graphcast docker image. We suggest using NVIDIA A100-SXM4-80GB instead"
-        )
+        logger.warn(f"{gpu_type_id} is known to crash on runpod around 50% of the time when used in combination with the remote graphcast docker image. We suggest using NVIDIA A100-SXM4-80GB instead")
 
 
 def validate(gpu_type_id, forcast_list, strict_start_times):
@@ -91,7 +77,7 @@ def remote_cast(
     cast_id=None,
     gpu_type_id="NVIDIA A100-SXM4-80GB",  # graphcast needs at least 61GB GPU ram
     container_disk_in_gb=50,
-    strict_start_times=True,
+    strict_start_times=True
 ):
 
     if cast_id is None:
@@ -103,7 +89,9 @@ def remote_cast(
     runpod.api_key = runpod_key
 
     pod = runpod.create_pod(
-        cloud_type="SECURE",  # or else someone might snoop your session and steal your AWS/CDS credentials
+        cloud_type="SECURE",
+        # or else someone might snoop your session and steal your AWS/CDS
+        # credentials
         name=f"easy-graphcast-{cast_id}",
         image_name="lewingtonpitsos/easy-graphcast:latest",
         gpu_type_id=gpu_type_id,
@@ -115,24 +103,26 @@ def remote_cast(
             CDS_KEY: cds_key,
             CDS_URL: cds_url,
             FORCAST_LIST: forcast_list,
-            CAST_ID: cast_id,
-        },
+            CAST_ID: cast_id
+        }
     )
 
     logger.info(
-        f"forcasting pod created, id: {pod['id']}, machineId: {pod['machineId']}, machine: {pod['machine']}"
-    )
+        f"forecasting pod created, id: {pod['id']}, machineId: {pod['machineId']}, machine: {pod['machine']}")
     monitor = UploadMonitor(
-        pod, aws_access_key_id, aws_secret_access_key, aws_bucket, cast_id
-    )
+        pod,
+        aws_access_key_id,
+        aws_secret_access_key,
+        aws_bucket,
+        cast_id)
 
     while not monitor.is_complete():
-        logger.info("checking runpod and s3 for forcast status: all systems green")
+        logger.info(
+            "checking runpod and s3 for forcast status: all systems green")
         time.sleep(60)
 
     logger.info(
-        f"easy-graphcast forcast is complete saved to, {monitor.upload_location()}"
-    )
+        f"easy-graphcast forcast is complete saved to, {monitor.upload_location()}")
 
     runpod.terminate_pod(pod["id"])
 

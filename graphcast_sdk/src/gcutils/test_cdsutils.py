@@ -1,8 +1,6 @@
-from __future__ import annotations
-
 import os
 
-from graphcast_sdk.src.gcutils.cdsutils import save_cds_file
+from gcutils.cdsutils import save_cds_file
 
 
 def test_saves_correctly():

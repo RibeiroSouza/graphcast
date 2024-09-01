@@ -1,23 +1,16 @@
-from __future__ import annotations
-
 import logging
 import os
+import shutil  # noqa
 
 import boto3
 from ai_models_graphcast.model import GraphcastModel
-from graphcast_sdk.src.gcutils.cdsutils import save_cds_rcfile
-from graphcast_sdk.src.gcutils.constants import AWS_ACCESS_KEY_ID
-from graphcast_sdk.src.gcutils.constants import AWS_BUCKET
-from graphcast_sdk.src.gcutils.constants import AWS_SECRET_ACCESS_KEY
-from graphcast_sdk.src.gcutils.constants import CAST_ID
-from graphcast_sdk.src.gcutils.constants import CDS_KEY
-from graphcast_sdk.src.gcutils.constants import CDS_URL
-from graphcast_sdk.src.gcutils.constants import FORCAST_LIST
-from graphcast_sdk.src.gcutils.inpututils import get_completion_path
-from graphcast_sdk.src.gcutils.inpututils import parse_forcast_list
-from graphcast_sdk.src.gcutils.log_config import setup_logging
+from gcutils.cdsutils import save_cds_rcfile
+from gcutils.constants import AWS_ACCESS_KEY_ID, AWS_BUCKET, AWS_SECRET_ACCESS_KEY, CAST_ID, CDS_KEY, CDS_URL, FORCAST_LIST
+from gcutils.inpututils import get_completion_path, parse_forcast_list
+from gcutils.log_config import setup_logging
 
 setup_logging()
+
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +21,10 @@ def upload_completion_file(client, aws_bucket, cast_id):
     with open(local_complete_file, "w") as f:
         f.write("complete")
 
-    client.upload_file(local_complete_file, aws_bucket, get_completion_path(cast_id))
+    client.upload_file(
+        local_complete_file,
+        aws_bucket,
+        get_completion_path(cast_id))
 
 
 def cast_all(
@@ -38,7 +34,7 @@ def cast_all(
     cds_url,
     cds_key,
     forcast_list,
-    cast_id,
+    cast_id
 ):
 
     save_cds_rcfile(cds_key=cds_key, cds_url=cds_url)
@@ -47,8 +43,7 @@ def cast_all(
     s3_client = boto3.client(
         "s3",
         aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-    )
+        aws_secret_access_key=aws_secret_access_key)
     logger.debug("s3 client set up")
 
     tmp_dir = "/tmp/"
@@ -88,7 +83,8 @@ def cast_all(
         s3_path = "/".join(output_name.split("/")[2:])
         with open(output_name, "rb") as data:
             s3_client.upload_fileobj(data, aws_bucket, s3_path)
-            logger.debug(f"File {s3_path} uploaded successfully from {output_name}")
+            logger.debug(
+                f"File {s3_path} uploaded successfully from {output_name}")
 
         os.remove(output_name)
 
@@ -106,7 +102,7 @@ if __name__ == "__main__":
         CDS_URL,
         CDS_KEY,
         FORCAST_LIST,
-        CAST_ID,
+        CAST_ID
     ]
 
     logger.debug("Checking environment variables are set")

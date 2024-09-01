@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import setuptools
 
-with open("README.md", "r") as fh:
+with open("README.md") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="graphcas_sdk",
+    name="graphcast_sdk",
     version="0.0.12",
     description="Allows people without massive GPUs to easily run graphcast on remote runpod servers",
     long_description=long_description,

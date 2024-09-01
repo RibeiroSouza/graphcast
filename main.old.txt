@@ -1,0 +1,690 @@
+from __future__ import annotations
+
+import os
+import boto3
+import logging
+from ai_models_graphcast.model import GraphcastModel
+from graphcast_sdk.src.gcutils.cdsutils import save_cds_rcfile
+from graphcast_sdk.src.gcutils.constants import AWS_ACCESS_KEY_ID
+from graphcast_sdk.src.gcutils.constants import AWS_BUCKET
+from graphcast_sdk.src.gcutils.constants import AWS_SECRET_ACCESS_KEY
+from graphcast_sdk.src.gcutils.constants import CAST_ID
+from graphcast_sdk.src.gcutils.constants import CDS_KEY
+from graphcast_sdk.src.gcutils.constants import CDS_URL
+from graphcast_sdk.src.gcutils.constants import FORCAST_LIST
+from graphcast_sdk.src.gcutils.inpututils import get_completion_path
+from graphcast_sdk.src.gcutils.inpututils import parse_forcast_list
+from graphcast_sdk.src.gcutils.log_config import setup_logging
+
+setup_logging()
+
+logger = logging.getLogger(__name__)
+
+
+def upload_completion_file(client, aws_bucket, cast_id):
+    local_complete_file = "/tmp/.easy_graphcast_complete"
+
+    with open(local_complete_file, "w") as f:
+        f.write("complete")
+
+    client.upload_file(local_complete_file, aws_bucket, get_completion_path(cast_id))
+
+
+def cast_all(
+    aws_access_key_id,
+    aws_secret_access_key,
+    aws_bucket,
+    cds_url,
+    cds_key,
+    forcast_list,
+    cast_id,
+):
+
+    save_cds_rcfile(cds_key=cds_key, cds_url=cds_url)
+    logger.debug("cds credentials file created")
+    forcast_list = parse_forcast_list(forcast_list)
+    s3_client = boto3.client(
+        "s3",
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+    )
+    logger.debug("s3 client set up")
+
+    tmp_dir = "/tmp/"
+    dir_path = f"{tmp_dir}{cast_id}/"
+    os.makedirs(dir_path, exist_ok=True)
+
+    for start_point in forcast_list:
+        date = start_point["start_date"]
+        time = start_point["start_time"]
+        dt = start_point["start"]
+        hours_to_forcast = start_point["hours_to_forcast"]
+        output_name = f"{dir_path}{dt}-output"
+
+        gc = GraphcastModel(
+            input="cds",
+            output="file",
+            download_assets=True,
+            path=output_name,
+            metadata={},
+            model_args={},
+            assets_sub_directory=tmp_dir,
+            assets=tmp_dir,
+            date=date,  # just the date part
+            time=time,  # just the time part
+            staging_dates=None,  # alternatively, a list of dates, as opposed to the single date/time
+            debug=True,
+            lead_time=hours_to_forcast,  # the number of hours to forcast
+            only_gpu=True,
+            archive_requests=None,
+            hindcast_reference_year=None,
+        )
+
+        gc.run()
+
+        logger.info(f"forcast complete for {start_point['start']}")
+
+        s3_path = "/".join(output_name.split("/")[2:])
+        with open(output_name, "rb") as data:
+            s3_client.upload_fileobj(data, aws_bucket, s3_path)
+            logger.debug(f"File {s3_path} uploaded successfully from {output_name}")
+
+        os.remove(output_name)
+
+    logger.info(f"all forcasts complete for {cast_id}, uploading to s3")
+    upload_completion_file(s3_client, aws_bucket, cast_id)
+
+    logger.info(f"upload complete for {cast_id}")
+
+
+if __name__ == "__main__":
+    required_variables = [
+        AWS_ACCESS_KEY_ID,
+        AWS_SECRET_ACCESS_KEY,
+        AWS_BUCKET,
+        CDS_URL,
+        CDS_KEY,
+        FORCAST_LIST,
+        CAST_ID,
+    ]
+
+    logger.debug("Checking environment variables are set")
+    for var in required_variables:
+        if var not in os.environ:
+            raise Exception(f"Missing required environment variable {var}")
+        else:
+            logger.debug(f"{var}: {os.environ[var]}")
+
+    cast_all(
+        aws_access_key_id=os.environ[AWS_ACCESS_KEY_ID],
+        aws_secret_access_key=os.environ[AWS_SECRET_ACCESS_KEY],
+        aws_bucket=os.environ[AWS_BUCKET],
+        cds_url=os.environ[CDS_URL],
+        cds_key=os.environ[CDS_KEY],
+        forcast_list=os.environ[FORCAST_LIST],
+        cast_id=os.environ[CAST_ID],
+    )
+
+from __future__ import annotations
+import json
+from graphcast_sdk.src.cast.cast import cast_all
+from graphcast_sdk.src.gcutils.constants import CDS_KEY
+from graphcast_sdk.src.gcutils.constants import CDS_URL
+from graphcast_sdk.src.gcutils.constants import AWS_BUCKET
+from graphcast_sdk.src.gcutils.constants import AWS_ACCESS_KEY_ID
+from graphcast_sdk.src.gcutils.constants import AWS_SECRET_ACCESS_KEY
+from graphcast_sdk.src.gcutils.inpututils import generate_cast_id
+
+
+with open("credentials.json", "r") as f:
+    credentials = json.load(f)
+
+cast_all(
+    aws_access_key_id=credentials[AWS_ACCESS_KEY_ID],
+    aws_secret_access_key=credentials[AWS_SECRET_ACCESS_KEY],
+    aws_bucket=credentials[AWS_BUCKET],
+    cds_url=credentials[CDS_URL],
+    cds_key=credentials[CDS_KEY],
+    forcast_list="[{'start': '2023122518', 'hours_to_forcast': 48}]",
+    cast_id=f"test_{generate_cast_id()}",
+)
+
+from __future__ import annotations
+
+import logging
+import os
+from datetime import datetime
+
+import requests
+import yaml
+from requests.exceptions import RequestException
+
+logger = logging.getLogger(__name__)
+
+
+RCFILE_PATH = "~/.cdsapirc"
+
+
+def save_cds_rcfile(cds_key, cds_url):
+    save_cds_file(cds_key, cds_url, RCFILE_PATH)
+
+
+def save_cds_file(cds_key, cds_url, filename):
+
+    expanded_filename = os.path.expanduser(filename)
+    with open(expanded_filename, "w") as f:
+        data = {"key": cds_key, "url": cds_url}
+        yaml.dump(data, f)
+
+
+def get_latest_available_date(
+    api_url="https://cds.climate.copernicus.eu/api/v2.ui/resources/reanalysis-era5-single-levels",
+    retries=3,
+    timeout=5,
+):
+    for attempt in range(retries):
+        try:
+            result = requests.get(api_url, timeout=timeout)
+            result.raise_for_status()
+
+            data = result.json()
+
+            date_range = data.get("structured_data", {}).get("temporalCoverage", "")
+            if not date_range:
+                raise ValueError("Temporal coverage not found in data")
+
+            final_date = date_range.split("/")[1]
+
+            return datetime.strptime(final_date, "%Y-%m-%d")
+
+        except RequestException as e:
+            logger.error(f"CDS most recent date request failed: {e}")
+            if attempt == retries - 1:
+                raise
+        except ValueError as e:
+            logger.error(f"cds most recent date data parsing error: {e}")
+            raise
+
+    raise Exception("Maximum retries reached")
+
+from __future__ import annotations
+
+AWS_ACCESS_KEY_ID = "AWS_ACCESS_KEY_ID"
+AWS_SECRET_ACCESS_KEY = "AWS_SECRET_ACCESS_KEY"
+AWS_BUCKET = "AWS_BUCKET"
+CDS_URL = "CDS_URL"
+CDS_KEY = "CDS_KEY"
+FORCAST_LIST = "GRAPHCAST_FORCAST_LIST"
+CAST_ID = "CAST_ID"
+RUNPOD_KEY = "RUNPOD_KEY"
+
+
+# from https://github.com/ecmwf-lab/ai-models-graphcast/blob/main/ai_models_graphcast/input.py
+CF_NAME_SFC = {
+    "10u": "10m_u_component_of_wind",
+    "10v": "10m_v_component_of_wind",
+    "2t": "2m_temperature",
+    "lsm": "land_sea_mask",
+    "msl": "mean_sea_level_pressure",
+    "tp": "total_precipitation_6hr",
+    "z": "geopotential_at_surface",
+}
+
+from __future__ import annotations
+
+import os
+import json
+import random
+import logging
+from datetime import datetime
+from datetime import timedelta
+
+from graphcast_sdk.src.gcutils.cdsutils import get_latest_available_date
+
+logger = logging.getLogger(__name__)
+
+
+def generate_cast_id():
+    adj = [
+        "whispering",
+        "forgotten",
+        "sublime",
+        "phantom",
+        "mystic",
+        "cosmic",
+        "dazzling",
+        "spectral",
+        "fleeting",
+        "shimmering",
+        "invisible",
+        "echoing",
+        "intangible",
+        "melodic",
+        "transient",
+        "prismatic",
+        "noctilucent",
+        "aurora",
+        "enigmatic",
+        "ephemeral",
+        "stellar",
+        "mythic",
+        "azure",
+        "crystalline",
+        "mystifying",
+        "radiant",
+        "lucent",
+        "polar",
+        "celestial",
+        "timeless",
+        "cobalt",
+        "harmonic",
+        "infinite",
+        "nautical",
+        "primal",
+        "solar",
+        "wandering",
+        "auroral",
+        "floral",
+        "lucent",
+        "maritime",
+        "opaline",
+        "stellar",
+        "twinkling",
+        "zodiacal",
+        "botanic",
+        "coral",
+        "dreamlike",
+        "glacial",
+        "harmonic",
+        "ethereal",
+        "arcane",
+        "sylvan",
+        "emerald",
+        "golden",
+        "silver",
+        "moonlit",
+        "sunlit",
+        "twilight",
+        "midnight",
+        "dawn",
+        "dusk",
+        "summer",
+        "winter",
+        "autumn",
+        "spring",
+        "ancient",
+        "modern",
+        "timeless",
+        "endless",
+        "boundless",
+        "ageless",
+        "eternal",
+        "everlasting",
+        "perpetual",
+        "unending",
+        "infinite",
+        "limitless",
+        "unbounded",
+        "unfathomable",
+    ]
+    nouns = [
+        "cosmos",
+        "phantasm",
+        "stardust",
+        "galaxy",
+        "oasis",
+        "tempest",
+        "artifact",
+        "cascade",
+        "maelstrom",
+        "saga",
+        "reverie",
+        "illusion",
+        "odyssey",
+        "riddle",
+        "miracle",
+        "cosmic",
+        "haven",
+        "mirage",
+        "oracle",
+        "tapestry",
+        "atlantis",
+        "harmony",
+        "nebulae",
+        "pinnacle",
+        "relic",
+        "zenith",
+        "borealis",
+        "inferno",
+        "oceanus",
+        "pulsar",
+        "saga",
+        "allegory",
+        "clarity",
+        "expanse",
+        "fable",
+        "lagoon",
+        "narrative",
+        "pastoral",
+        "rhapsody",
+        "sonnet",
+        "tundra",
+        "cascade",
+        "echo",
+        "infinity",
+        "monolith",
+        "oasis",
+        "panorama",
+        "sphere",
+        "torrent",
+        "wilderness",
+        "abyss",
+        "beacon",
+        "chronicle",
+        "dimension",
+        "eclipse",
+        "fjord",
+        "glacier",
+        "horizon",
+        "island",
+        "jungle",
+        "kaleidoscope",
+        "labyrinth",
+        "meadow",
+        "nirvana",
+        "ocean",
+        "paradise",
+        "quasar",
+        "rainforest",
+        "sanctuary",
+        "tide",
+        "universe",
+        "vortex",
+        "waterfall",
+        "xanadu",
+        "yonder",
+        "zenith",
+        "arcadia",
+        "bazaar",
+        "citadel",
+        "dome",
+        "enclave",
+        "fortress",
+        "grove",
+        "hamlet",
+        "isle",
+    ]
+
+    present = datetime.now()
+    time_string = present.strftime("%Y-%m-%d_%H-%M-%S")
+
+    return f"{time_string}_{random.choice(adj)}_{random.choice(nouns)}"
+
+
+def confirm_start_time_exists(start_point, c):
+    start_datetime = datetime.strptime(start_point["start_date"], "%Y%m%d")
+
+    c.retrieve(
+        "reanalysis-era5-single-levels",
+        {
+            "product_type": "reanalysis",
+            "format": "netcdf",
+            "day": start_datetime.day,
+            "year": start_datetime.year,
+            "month": start_datetime.month,
+            "time": start_point["start_time"],
+            "variable": "2m_temperature",
+            "area": [
+                1,
+                -1,
+                -1,
+                1,
+            ],
+        },
+        "file.nc",
+    )
+
+    os.remove("file.nc")
+
+
+def parse_forcast_list(forcast_list):
+    # the runpod API cannot handle double quotes so forcast_list is single quoted
+    # we need to convert it to regular JSON
+    forcast_list = json.loads(forcast_list.replace("'", '"'))
+
+    for start in forcast_list:
+        start["start_time"] = int(start["start"][-2:])
+        start["start_date"] = start["start"][:-2]
+
+    return forcast_list
+
+
+def get_completion_path(cast_id):
+    return f"{cast_id}/.easy_graphcast_complete"
+
+
+def validate_forcast_list(forcast_list, strict_start_times=True):
+    # the runpod API cannot handle double quotes so forcast_list is single quoted
+    if '"' in forcast_list:
+        raise ValueError(
+            "forcast_list cannot contain double quotes (this is a limitation of the runpod API) replace with single quotes."
+        )
+
+    forcast_list = parse_forcast_list(forcast_list)
+
+    if strict_start_times:
+        for start in forcast_list:
+            if start["start_time"] not in [6, 18]:
+                raise ValueError(
+                    "you must start all graphcast forcasts at either 0600 or 1800 (see https://youtu.be/PD1v5PCJs_o?t=1915 for more information)."
+                    + "You can disable this check by setting strict_start_times=False"
+                )
+    try:
+        latest_available_date = get_latest_available_date()
+        got_date = True
+    except Exception as e:
+        logger.info(f"could not get the latest available date due to error: {e}")
+        got_date = False
+
+    if got_date:
+        for start in forcast_list:
+            start_date = datetime.strptime(start["start"], "%Y%m%d%H")
+            if latest_available_date < start_date:
+                raise ValueError(
+                    f"there is no public ERA5 data for the start date {start['start']} so you cannot start a forcast from that date. The latest available date is {latest_available_date}"
+                )
+    else:
+        latest_available_date = datetime.now() - timedelta(days=5)
+        for start in forcast_list:
+            start_date = datetime.strptime(start["start"], "%Y%m%d%H")
+            if latest_available_date < start_date:
+                logger.warning(
+                    f"the forcast start date {start_date} is more recent than 5 days ago, the data may not exist yet. Monitor the runpod instance closely"
+                )
+
+    logger.info("input passed validation")
+
+from __future__ import annotations
+
+import logging
+
+
+def setup_logging():
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+    logging.basicConfig(
+        format="%(levelname)s: %(asctime)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        level=logging.INFO,
+    )
+
+from __future__ import annotations
+
+import os
+
+from graphcast_sdk.src.gcutils.cdsutils import save_cds_file
+
+
+def test_saves_correctly():
+    filename = "tmp.cruft"
+    save_cds_file("key", "url", filename)
+    with open(filename) as f:
+        content = f.read()
+
+    assert content == "key: key\nurl: url\n"
+    os.remove(filename)
+
+from __future__ import annotations
+
+import sys
+
+from graphcast_sdk.src.gcutils.log_config import setup_logging
+from graphcast_sdk.src.sdk.remote_cast import cast_from_parameters
+
+setup_logging()
+
+if __name__ == "__main__":
+    # the first passed in argument is a filename
+    cast_from_parameters(sys.argv[1])
+
+
+from __future__ import annotations
+
+import json
+import time
+import boto3
+import runpod
+import logging
+from graphcast_sdk.src.gcutils.constants import AWS_ACCESS_KEY_ID
+from graphcast_sdk.src.gcutils.constants import AWS_BUCKET
+from graphcast_sdk.src.gcutils.constants import AWS_SECRET_ACCESS_KEY
+from graphcast_sdk.src.gcutils.constants import CAST_ID
+from graphcast_sdk.src.gcutils.constants import CDS_KEY
+from graphcast_sdk.src.gcutils.constants import CDS_URL
+from graphcast_sdk.src.gcutils.constants import FORCAST_LIST
+from graphcast_sdk.src.gcutils.inpututils import generate_cast_id
+from graphcast_sdk.src.gcutils.inpututils import get_completion_path
+from graphcast_sdk.src.gcutils.inpututils import validate_forcast_list
+
+logger = logging.getLogger(__name__)
+
+
+class UploadMonitor:
+    def __init__(
+        self, pod, aws_access_key_id, aws_secret_access_key, aws_bucket, cast_id
+    ) -> None:
+        self.s3_client = boto3.client(
+            "s3",
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+        )
+        self.pod = pod
+        self.cast_id = cast_id
+        self.aws_bucket = aws_bucket
+
+    def is_complete(self):
+        pod = runpod.get_pod(self.pod["id"])
+
+        if not pod:
+            raise Exception(
+                f"runpod pod {self.pod} was terminated prematurely, output of runpod.get_pod is: {pod}"
+            )
+
+        try:
+            self.s3_client.head_object(
+                Bucket=self.aws_bucket, Key=get_completion_path(self.cast_id)
+            )
+            return True
+        except Exception as e:
+            if hasattr(e, "response") and e.response["Error"].get("Code") == "404":
+                logger.debug(f"upload not complete, expected_s3_error {e}")
+                return False
+            else:
+                raise e
+
+    def upload_location(self):
+        return f"s3://{self.aws_bucket}/{self.cast_id}/"
+
+
+def cast_from_parameters(param_file=None, **kwargs):
+    if param_file is not None:
+        assert param_file.endswith(".json"), "param_file must be a json file"
+
+        with open(param_file, "r") as f:
+            parameters = json.load(f)
+        kwargs = parameters
+
+    remote_cast(**kwargs)
+
+
+def validate_gpu_type_id(gpu_type_id):
+    if gpu_type_id == "NVIDIA A100 80GB PCIe":
+        logger.warn(
+            f"{gpu_type_id} is known to crash on runpod around 50% of the time when used in combination with the remote graphcast docker image. We suggest using NVIDIA A100-SXM4-80GB instead"
+        )
+
+
+def validate(gpu_type_id, forcast_list, strict_start_times):
+    validate_gpu_type_id(gpu_type_id)
+    validate_forcast_list(forcast_list, strict_start_times)
+
+
+def remote_cast(
+    aws_access_key_id,
+    aws_secret_access_key,
+    aws_bucket,
+    cds_url,
+    cds_key,
+    forcast_list,
+    runpod_key,
+    cast_id=None,
+    gpu_type_id="NVIDIA A100-SXM4-80GB",  # graphcast needs at least 61GB GPU ram
+    container_disk_in_gb=50,
+    strict_start_times=True,
+):
+
+    if cast_id is None:
+        cast_id = generate_cast_id()
+        logger.info(f"cast_id generated {cast_id}")
+
+    logger.info("validating input")
+    validate(gpu_type_id, forcast_list, strict_start_times)
+    runpod.api_key = runpod_key
+
+    pod = runpod.create_pod(
+        cloud_type="SECURE",  # or else someone might snoop your session and steal your AWS/CDS credentials
+        name=f"easy-graphcast-{cast_id}",
+        image_name="lewingtonpitsos/easy-graphcast:latest",
+        gpu_type_id=gpu_type_id,
+        container_disk_in_gb=container_disk_in_gb,
+        env={
+            AWS_ACCESS_KEY_ID: aws_access_key_id,
+            AWS_SECRET_ACCESS_KEY: aws_secret_access_key,
+            AWS_BUCKET: aws_bucket,
+            CDS_KEY: cds_key,
+            CDS_URL: cds_url,
+            FORCAST_LIST: forcast_list,
+            CAST_ID: cast_id,
+        },
+    )
+
+    logger.info(
+        f"forcasting pod created, id: {pod['id']}, machineId: {pod['machineId']}, machine: {pod['machine']}"
+    )
+    monitor = UploadMonitor(
+        pod, aws_access_key_id, aws_secret_access_key, aws_bucket, cast_id
+    )
+
+    while not monitor.is_complete():
+        logger.info("checking runpod and s3 for forcast status: all systems green")
+        time.sleep(60)
+
+    logger.info(
+        f"easy-graphcast forcast is complete saved to, {monitor.upload_location()}"
+    )
+
+    runpod.terminate_pod(pod["id"])
+
+    logger.info("pod terminated")
+
+    return monitor.upload_location()

@@ -21,7 +21,7 @@ Run [graphcast](https://github.com/google-deepmind/graphcast) on a [runpod](http
 
 ## Installation
 
-`pip install remote-graphcast`
+`pip install graphcast-sdk`
 
 ## Example Code
 
@@ -43,13 +43,13 @@ remote_cast(
  container_disk_in_gb=50, # you'll need around 40GB per 10 day forcast + a healthy 10GB buffer
 )
 
-# internally this function will keep polling the pod it spins up and the s3 bucket until it sees that all forcasts
+# internally this function will keep polling the pod it spins up and the s3 bucket until it sees that all forecasts
 # are complete, then it will return
 
 ```
 
 ## Warning
 
-In order to make predictions graphcast must request ERA5 reanalysis data from the European Center for Medium Range Weather Forcasts (ECMWF). Usually the download completes in < 2 minutes. However, if their servers are busy your request will be [put in a queue](https://confluence.ecmwf.int/display/UDOC/My+request+is+queued+for+a+long+time+-+Web+API+FAQ). You can view all your open requests [here](https://cds.climate.copernicus.eu/cdsapp#!/yourrequests). Until your request is granted is granted, the graphcast runpod server will be waiting idly (costing you money). This process has taken me > 1 hour in the past.
+In order to make predictions graphcast must request ERA5 reanalysis data from the European Center for Medium Range Weather Forecasts (ECMWF). Usually the download completes in < 2 minutes. However, if their servers are busy your request will be [put in a queue](https://confluence.ecmwf.int/display/UDOC/My+request+is+queued+for+a+long+time+-+Web+API+FAQ). You can view all your open requests [here](https://cds.climate.copernicus.eu/cdsapp#!/yourrequests). Until your request is granted is granted, the graphcast runpod server will be waiting idly (costing you money). This process has taken me > 1 hour in the past.
 
 You can also check your progress by viewing the runpod logs.

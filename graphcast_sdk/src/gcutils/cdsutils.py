@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 import os
 from datetime import datetime
@@ -19,18 +17,16 @@ def save_cds_rcfile(cds_key, cds_url):
 
 
 def save_cds_file(cds_key, cds_url, filename):
-
     expanded_filename = os.path.expanduser(filename)
     with open(expanded_filename, "w") as f:
-        data = {"key": cds_key, "url": cds_url}
+        data = {
+            "key": cds_key,
+            "url": cds_url
+        }
         yaml.dump(data, f)
 
 
-def get_latest_available_date(
-    api_url="https://cds.climate.copernicus.eu/api/v2.ui/resources/reanalysis-era5-single-levels",
-    retries=3,
-    timeout=5,
-):
+def get_latest_available_date(api_url="https://cds.climate.copernicus.eu/api/v2.ui/resources/reanalysis-era5-single-levels", retries=3, timeout=5):
     for attempt in range(retries):
         try:
             result = requests.get(api_url, timeout=timeout)

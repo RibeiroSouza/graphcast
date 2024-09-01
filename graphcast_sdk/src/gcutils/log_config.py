@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 
 
@@ -9,5 +7,5 @@ def setup_logging():
     logging.basicConfig(
         format="%(levelname)s: %(asctime)s %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging.INFO,
+        level=logging.INFO
     )

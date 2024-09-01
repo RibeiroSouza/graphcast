@@ -1,5 +1,37 @@
-[tool.black]
-target_version = ['py38']
-line_length = 88
-indent_size = 4
-color = true
+[tool.ruff]
+fix = false
+exclude = ["docs"]
+line-length = 150
+select = [
+    "Q",   # Flake8
+    "F",   # Pyflakes
+    "W",   # pycodestyle
+    "E",   # pycodestyle
+    "I",   # isort
+    "UP",  # pyupgrade
+    "D",  # pydocstyle
+    "PL",  # Pylint
+    "T201", # Print Statement
+]
+ignore = [
+    "E501",  # line too long
+    "D101",  # missing docstring in public class
+    "D107",  # missing docstring for init functions
+    "D105",  # missing docstring for magic method
+    "D100",  # missing docstring public module
+    "D104",  # missing docstring in public package
+    "D410",  # no blank line after section
+    "D205",  # blank line between summary and description
+    "PLR2004",  # magic value comparison
+    "PLR0913", # too many arguments in func definition
+]
+
+[tool.ruff.pydocstyle]
+convention = "google"
+
+[tool.setuptools.dynamic.dependencies]
+file = "requirements.txt"
+
+[tool.setuptools.packages.find]
+where = ["graphcast_sdk.src"]
+namespaces = false
